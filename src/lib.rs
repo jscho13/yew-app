@@ -8,6 +8,7 @@ struct Model {
 
 enum Msg {
     AddOne,
+    SubtractOne,
 }
 
 impl Component for Model {
@@ -22,7 +23,7 @@ impl Component for Model {
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::AddOne => self.value += 1
+            Msg::AddOne => self.value += 1,
             Msg::SubtractOne => self.value -= 1
         }
         true
