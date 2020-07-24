@@ -18,14 +18,14 @@ pub struct Model {
 
 #[derive(Deserialize, Debug)]
 pub struct DataFromFile {
-    user_id: u32,
+    userId: u32,
     id: u32,
     title: String,
     completed: bool,
 }
 
 pub enum Msg {
-	Update(String),
+    Update(String),
     FetchData,
     FetchReady(Result<DataFromFile, Error>),
     FetchFailed,
@@ -42,41 +42,41 @@ impl Component for Model {
             fetching: false,
             data: None,
             ft: None,
-			value: "".to_string(),
+            value: "".to_string(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::Update(val) => {
-				log::info!("logging: {:?}", val);
+                log::info!("logging: {:?}", val);
                 self.value = val;
             }
             Msg::FetchData => {
                 self.fetching = true;
 
-				let callback = self.link.callback(
-					move |response: Response<Json<Result<DataFromFile, Error>>>| {
-						let (meta, Json(data)) = response.into_parts();
+                let callback = self.link.callback(
+                    move |response: Response<Json<Result<DataFromFile, Error>>>| {
+                        let (meta, Json(data)) = response.into_parts();
                         // log::info!("logging: {:?}, {:?}", meta, data);
-						if meta.status.is_success() {
-							Msg::FetchReady(data)
-						} else {
-							Msg::FetchFailed
-						}
-					},
-				);
-				let request = Request::get("https://jsonplaceholder.typicode.com/todos/1").body(Nothing).unwrap();
-				// let request = Request::get("/data.json").body(Nothing).unwrap();
+                        if meta.status.is_success() {
+                            Msg::FetchReady(data)
+                        } else {
+                            Msg::FetchFailed
+                        }
+                    },
+                );
+                let request = Request::get("https://jsonplaceholder.typicode.com/todos/1").body(Nothing).unwrap();
+                // let request = Request::get("/data.json").body(Nothing).unwrap();
                 let task = FetchService::fetch(request, callback).unwrap();
                 self.ft = Some(task);
             }
             Msg::FetchReady(response) => {
                 self.fetching = false;
-				match response {
-					Ok(v) => self.data = Some(v.title),
-					Err(e) => self.data = Some(e.to_string()),
-				}
+                match response {
+                    Ok(v) => self.data = Some(v.title),
+                    Err(e) => self.data = Some(e.to_string()),
+                }
             }
             Msg::FetchFailed => {
                 self.fetching = false;
@@ -94,8 +94,8 @@ impl Component for Model {
             <div class="container">
                 <p>{ "Ticker Symbol" }</p>
                 <input type="text"
-					value=&self.value
-					oninput=self.link.callback(|e: InputData| Msg::Update(e.value))
+                    value=&self.value
+                    oninput=self.link.callback(|e: InputData| Msg::Update(e.value))
                 />
                 <button onclick=self.link.callback(|_| Msg::FetchData)>
                     { "Fetch Data" }
@@ -113,16 +113,18 @@ impl Component for Model {
 impl Model {
    fn view_data(&self) -> Html {
         if let Some(value) = &self.data {
-			
             html! {
-                <p>{ value }</p>
+                <>
+                    <p>{ value }</p>
+                    <p>{ &self.value }</p>
+                </>
             }
         } else {
             html! {
-				<>
-					<p>{ "Data hasn't fetched yet." }</p>
-					<p>{ &self.value }</p>
-				</>
+                <>
+                    <p>{ "Data hasn't fetched yet." }</p>
+                    <p>{ &self.value }</p>
+                </>
             }
         }
     }
