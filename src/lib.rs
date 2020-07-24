@@ -1,100 +1,33 @@
 #![recursion_limit = "256"]
 
-use wasm_bindgen::prelude::*;
 use yew::prelude::*;
+use wasm_bindgen::prelude::*;
 use anyhow::Error;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::{Deserialize};
 use yew::format::{Json, Nothing};
 use yew::services::fetch::{FetchService, FetchTask, Request, Response};
-use yew::services::websocket::{WebSocketService, WebSocketStatus, WebSocketTask};
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
-
-type AsBinary = bool;
-
-pub enum Format {
-    Json,
-}
-
-pub enum WsAction {
-    Connect,
-    SendData(AsBinary),
-    Disconnect,
-    Lost,
-}
-
-pub enum Msg {
-    FetchData(Format, AsBinary),
-    WsAction(WsAction),
-    FetchReady(Result<DataFromFile, Error>),
-    WsReady(Result<WsResponse, Error>),
-    Ignore,
-}
-
-impl From<WsAction> for Msg {
-    fn from(action: WsAction) -> Self {
-        Msg::WsAction(action)
-    }
-}
-
-/// This type is used to parse data from `./static/data.json` file and
-/// have to correspond the data layout from that file.
-#[derive(Deserialize, Debug)]
-pub struct DataFromFile {
-    value: u32,
-}
-
-/// This type is used as a request which sent to websocket connection.
-#[derive(Serialize, Debug)]
-struct WsRequest {
-    value: u32,
-}
-
-/// This type is an expected response from a websocket connection.
-#[derive(Deserialize, Debug)]
-pub struct WsResponse {
-    value: u32,
-}
 
 pub struct Model {
     link: ComponentLink<Model>,
     fetching: bool,
-    data: Option<u32>,
+    data: Option<String>,
     ft: Option<FetchTask>,
-    ws: Option<WebSocketTask>,
 }
 
-impl Model {
-    fn view_data(&self) -> Html {
-        if let Some(value) = self.data {
-            html! {
-                <p>{ value }</p>
-            }
-        } else {
-            html! {
-                <p>{ "Data hasn't fetched yet." }</p>
-            }
-        }
-    }
+#[derive(Deserialize, Debug)]
+pub struct DataFromFile {
+    user_id: u32,
+    id: u32,
+    title: String,
+    completed: bool,
+}
 
-    fn fetch_json(&mut self, binary: AsBinary) -> yew::services::fetch::FetchTask {
-        let callback = self.link.callback(
-            move |response: Response<Json<Result<DataFromFile, Error>>>| {
-                let (meta, Json(data)) = response.into_parts();
-                println!("META: {:?}, {:?}", meta, data);
-                if meta.status.is_success() {
-                    Msg::FetchReady(data)
-                } else {
-                    Msg::Ignore // FIXME: Handle this error accordingly.
-                }
-            },
-        );
-        let request = Request::get("/data.json").body(Nothing).unwrap();
-        if binary {
-            FetchService::fetch_binary(request, callback).unwrap()
-        } else {
-            FetchService::fetch(request, callback).unwrap()
-        }
-    }
+pub enum Msg {
+    FetchData,
+    FetchReady(Result<DataFromFile, Error>),
+    FetchFailed,
+    Ignore,
 }
 
 impl Component for Model {
@@ -107,52 +40,40 @@ impl Component for Model {
             fetching: false,
             data: None,
             ft: None,
-            ws: None,
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::FetchData(format, binary) => {
+            Msg::FetchData => {
                 self.fetching = true;
-                let task = match format {
-                    Format::Json => self.fetch_json(binary),
-                };
+
+				let callback = self.link.callback(
+					move |response: Response<Json<Result<DataFromFile, Error>>>| {
+						let (meta, Json(data)) = response.into_parts();
+                        // log::info!("logging: {:?}, {:?}", meta, data);
+						if meta.status.is_success() {
+							Msg::FetchReady(data)
+						} else {
+							Msg::FetchFailed
+						}
+					},
+				);
+				let request = Request::get("https://jsonplaceholder.typicode.com/todos/1").body(Nothing).unwrap();
+				// let request = Request::get("/data.json").body(Nothing).unwrap();
+                let task = FetchService::fetch(request, callback).unwrap();
                 self.ft = Some(task);
             }
-            Msg::WsAction(action) => match action {
-                WsAction::Connect => {
-                    let callback = self.link.callback(|Json(data)| Msg::WsReady(data));
-                    let notification = self.link.callback(|status| match status {
-                        WebSocketStatus::Opened => Msg::Ignore,
-                        WebSocketStatus::Closed | WebSocketStatus::Error => WsAction::Lost.into(),
-                    });
-                    let task =
-                        WebSocketService::connect("ws://localhost:9001/", callback, notification)
-                            .unwrap();
-                    self.ws = Some(task);
-                }
-                WsAction::SendData(binary) => {
-                    let request = WsRequest { value: 321 };
-                    if binary {
-                        self.ws.as_mut().unwrap().send_binary(Json(&request));
-                    } else {
-                        self.ws.as_mut().unwrap().send(Json(&request));
-                    }
-                }
-                WsAction::Disconnect => {
-                    self.ws.take();
-                }
-                WsAction::Lost => {
-                    self.ws = None;
-                }
-            },
             Msg::FetchReady(response) => {
                 self.fetching = false;
-                self.data = response.map(|data| data.value).ok();
+				match response {
+					Ok(v) => self.data = Some(v.title),
+					Err(e) => self.data = Some(e.to_string()),
+				}
             }
-            Msg::WsReady(response) => {
-                self.data = response.map(|data| data.value).ok();
+            Msg::FetchFailed => {
+                self.fetching = false;
+                self.data = Some(String::from("Couldn't fetch data, try again"));
             }
             Msg::Ignore => {
                 return false;
@@ -161,44 +82,41 @@ impl Component for Model {
         true
     }
 
+    fn view(&self) -> Html {
+        html! {
+            <section >
+                <nav>
+                    <button onclick=self.link.callback(|_| Msg::FetchData)>
+                        { "Fetch Data" }
+                    </button>
+                </nav>
+                { self.view_data() }
+            </section>
+        }
+    }
+
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
         false
     }
+}
 
-    fn view(&self) -> Html {
-        html! {
-            <div>
-                <nav class="menu">
-                    <button onclick=self.link.callback(|_| Msg::FetchData(Format::Json, false))>
-                        { "Fetch Data" }
-                    </button>
-                    <button onclick=self.link.callback(|_| Msg::FetchData(Format::Json, true))>
-                        { "Fetch Data [binary]" }
-                    </button>
-                    { self.view_data() }
-                    <button disabled=self.ws.is_some()
-                            onclick=self.link.callback(|_| WsAction::Connect)>
-                        { "Connect To WebSocket" }
-                    </button>
-                    <button disabled=self.ws.is_none()
-                            onclick=self.link.callback(|_| WsAction::SendData(false))>
-                        { "Send To WebSocket" }
-                    </button>
-                    <button disabled=self.ws.is_none()
-                            onclick=self.link.callback(|_| WsAction::SendData(true))>
-                        { "Send To WebSocket [binary]" }
-                    </button>
-                    <button disabled=self.ws.is_none()
-                            onclick=self.link.callback(|_| WsAction::Disconnect)>
-                        { "Close WebSocket connection" }
-                    </button>
-                </nav>
-            </div>
+impl Model {
+   fn view_data(&self) -> Html {
+        if let Some(value) = &self.data {
+			
+            html! {
+                <p>{ value }</p>
+            }
+        } else {
+            html! {
+                <p>{ "Data hasn't fetched yet." }</p>
+            }
         }
     }
 }
 
 #[wasm_bindgen(start)]
-pub fn run_app() {
+pub fn main() {
+    wasm_logger::init(wasm_logger::Config::default());
     App::<Model>::new().mount_to_body();
 }
