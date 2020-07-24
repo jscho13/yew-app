@@ -13,15 +13,14 @@ pub struct Model {
     fetching: bool,
     data: Option<String>,
     ft: Option<FetchTask>,
-    value: String,
+    stockTicker: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct DataFromFile {
-    userId: u32,
-    id: u32,
-    title: String,
-    completed: bool,
+    latestPrice: f32,
+    companyName: String,
+    primaryExchange: String,
 }
 
 pub enum Msg {
@@ -42,7 +41,7 @@ impl Component for Model {
             fetching: false,
             data: None,
             ft: None,
-            value: "".to_string(),
+            stockTicker: "".to_string(),
         }
     }
 
@@ -50,7 +49,7 @@ impl Component for Model {
         match msg {
             Msg::Update(val) => {
                 log::info!("logging: {:?}", val);
-                self.value = val;
+                self.stockTicker = val;
             }
             Msg::FetchData => {
                 self.fetching = true;
@@ -58,7 +57,6 @@ impl Component for Model {
                 let callback = self.link.callback(
                     move |response: Response<Json<Result<DataFromFile, Error>>>| {
                         let (meta, Json(data)) = response.into_parts();
-                        // log::info!("logging: {:?}, {:?}", meta, data);
                         if meta.status.is_success() {
                             Msg::FetchReady(data)
                         } else {
@@ -66,15 +64,15 @@ impl Component for Model {
                         }
                     },
                 );
-                let request = Request::get("https://jsonplaceholder.typicode.com/todos/1").body(Nothing).unwrap();
-                // let request = Request::get("/data.json").body(Nothing).unwrap();
+                let baseUrl = format!("https://cloud.iexapis.com/stable/stock/{}/quote?token=pk_73b450b6f57349999e83bd3ff4d024d6", self.stockTicker);
+                let request = Request::get(baseUrl).body(Nothing).unwrap();
                 let task = FetchService::fetch(request, callback).unwrap();
                 self.ft = Some(task);
             }
             Msg::FetchReady(response) => {
                 self.fetching = false;
                 match response {
-                    Ok(v) => self.data = Some(v.title),
+                    Ok(v) => self.data = Some(v.latestPrice.to_string()),
                     Err(e) => self.data = Some(e.to_string()),
                 }
             }
@@ -94,7 +92,7 @@ impl Component for Model {
             <div class="container">
                 <p>{ "Ticker Symbol" }</p>
                 <input type="text"
-                    value=&self.value
+                    value=&self.stockTicker
                     oninput=self.link.callback(|e: InputData| Msg::Update(e.value))
                 />
                 <button onclick=self.link.callback(|_| Msg::FetchData)>
@@ -112,18 +110,16 @@ impl Component for Model {
 
 impl Model {
    fn view_data(&self) -> Html {
-        if let Some(value) = &self.data {
+        if let Some(latestPrice) = &self.data {
             html! {
                 <>
-                    <p>{ value }</p>
-                    <p>{ &self.value }</p>
+                    <p>{ latestPrice }</p>
                 </>
             }
         } else {
             html! {
                 <>
                     <p>{ "Data hasn't fetched yet." }</p>
-                    <p>{ &self.value }</p>
                 </>
             }
         }
