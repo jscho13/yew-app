@@ -6,13 +6,14 @@ use anyhow::Error;
 use serde_derive::{Deserialize};
 use yew::format::{Json, Nothing};
 use yew::services::fetch::{FetchService, FetchTask, Request, Response};
-use yew::{html, Component, ComponentLink, Html, ShouldRender};
+use yew::{html, Component, ComponentLink, Html, InputData, ShouldRender};
 
 pub struct Model {
     link: ComponentLink<Model>,
     fetching: bool,
     data: Option<String>,
     ft: Option<FetchTask>,
+    value: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -24,6 +25,7 @@ pub struct DataFromFile {
 }
 
 pub enum Msg {
+	Update(String),
     FetchData,
     FetchReady(Result<DataFromFile, Error>),
     FetchFailed,
@@ -40,11 +42,16 @@ impl Component for Model {
             fetching: false,
             data: None,
             ft: None,
+			value: "".to_string(),
         }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
+            Msg::Update(val) => {
+				log::info!("logging: {:?}", val);
+                self.value = val;
+            }
             Msg::FetchData => {
                 self.fetching = true;
 
@@ -84,14 +91,17 @@ impl Component for Model {
 
     fn view(&self) -> Html {
         html! {
-            <section >
-                <nav>
-                    <button onclick=self.link.callback(|_| Msg::FetchData)>
-                        { "Fetch Data" }
-                    </button>
-                </nav>
+            <div class="container">
+                <p>{ "Ticker Symbol" }</p>
+                <input type="text"
+					value=&self.value
+					oninput=self.link.callback(|e: InputData| Msg::Update(e.value))
+                />
+                <button onclick=self.link.callback(|_| Msg::FetchData)>
+                    { "Fetch Data" }
+                </button>
                 { self.view_data() }
-            </section>
+            </div>
         }
     }
 
@@ -109,7 +119,10 @@ impl Model {
             }
         } else {
             html! {
-                <p>{ "Data hasn't fetched yet." }</p>
+				<>
+					<p>{ "Data hasn't fetched yet." }</p>
+					<p>{ &self.value }</p>
+				</>
             }
         }
     }

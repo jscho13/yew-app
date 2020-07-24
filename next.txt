@@ -1,0 +1,3 @@
+hook it to finance api
+style
+practice pure rust
