@@ -11,7 +11,7 @@ use yew::{html, Component, ComponentLink, Html, InputData, ShouldRender};
 pub struct Model {
     link: ComponentLink<Model>,
     fetching: bool,
-    data: Option<String>,
+    data: Option<DataFromFile>,
     ft: Option<FetchTask>,
     stockTicker: String,
 }
@@ -48,7 +48,6 @@ impl Component for Model {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::Update(val) => {
-                log::info!("logging: {:?}", val);
                 self.stockTicker = val;
             }
             Msg::FetchData => {
@@ -72,13 +71,17 @@ impl Component for Model {
             Msg::FetchReady(response) => {
                 self.fetching = false;
                 match response {
-                    Ok(v) => self.data = Some(v.latestPrice.to_string()),
-                    Err(e) => self.data = Some(e.to_string()),
+                    Ok(v) => self.data = Some(v),
+                    Err(e) => {
+                        self.data = None;
+                        log::info!("error: {:?}", e);
+                    }
                 }
             }
             Msg::FetchFailed => {
                 self.fetching = false;
-                self.data = Some(String::from("Couldn't fetch data, try again"));
+                self.data = None;
+                log::info!("error: couldn't fetch data");
             }
             Msg::Ignore => {
                 return false;
@@ -110,9 +113,12 @@ impl Component for Model {
 
 impl Model {
    fn view_data(&self) -> Html {
-        if let Some(latestPrice) = &self.data {
+        if let Some(iexResponse) = &self.data {
+            let DataFromFile { latestPrice, companyName, primaryExchange } = iexResponse;
             html! {
                 <>
+                    <p>{ primaryExchange }</p>
+                    <p>{ companyName }</p>
                     <p>{ latestPrice }</p>
                 </>
             }
