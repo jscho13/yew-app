@@ -8,12 +8,13 @@ struct Model {
 
 enum Msg {
     AddOne,
-    SubtractOne,
 }
 
 impl Component for Model {
     type Message = Msg;
     type Properties = ();
+
+    // MODEL
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         Self {
             link,
@@ -21,29 +22,33 @@ impl Component for Model {
         }
     }
 
+
+    // VIEW
+    fn view(&self) -> Html {
+        html! {
+            <div>
+                <button onclick=self.link.callback(|_| Msg::AddOne)>{ "+1" }</button>
+                <p>{ self.value }</p>
+            </div>
+        }
+    }
+
+
+    // UPDATE
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::AddOne => self.value += 1
-            Msg::SubtractOne => self.value -= 1
         }
         true
     }
+
+
 
     fn change(&mut self, _props: Self::Properties) -> ShouldRender {
         // Should only return "true" if new properties are different to
         // previously received properties.
         // This component has no properties so we will always return "false".
         false
-    }
-
-    fn view(&self) -> Html {
-        html! {
-            <div>
-                <button onclick=self.link.callback(|_| Msg::AddOne)>{ "+1" }</button>
-                <button onclick=self.link.callback(|_| Msg::SubtractOne)>{ "-1" }</button>
-                <p>{ self.value }</p>
-            </div>
-        }
     }
 }
 
