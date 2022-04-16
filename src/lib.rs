@@ -1,58 +1,139 @@
-use wasm_bindgen::prelude::*;
-use yew::prelude::*;
+#![recursion_limit = "256"]
 
-struct Model {
-    link: ComponentLink<Self>,
-    value: i64,
+use yew::prelude::*;
+use wasm_bindgen::prelude::*;
+use anyhow::Error;
+use serde_derive::{Deserialize};
+use yew::format::{Json, Nothing};
+use yew::services::fetch::{FetchService, FetchTask, Request, Response};
+use yew::{html, Component, ComponentLink, Html, InputData, ShouldRender};
+
+pub struct Model {
+    link: ComponentLink<Model>,
+    fetching: bool,
+    data: Option<DataFromFile>,
+    ft: Option<FetchTask>,
+    stockTicker: String,
 }
 
-enum Msg {
-    AddOne,
+#[derive(Deserialize, Debug)]
+pub struct DataFromFile {
+    latestPrice: f32,
+    companyName: String,
+    primaryExchange: String,
+}
+
+pub enum Msg {
+    Update(String),
+    FetchData,
+    FetchReady(Result<DataFromFile, Error>),
+    FetchFailed,
+    Ignore,
 }
 
 impl Component for Model {
     type Message = Msg;
     type Properties = ();
 
-    // MODEL
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
-        Self {
+        Model {
             link,
-            value: 0,
+            fetching: false,
+            data: None,
+            ft: None,
+            stockTicker: "".to_string(),
         }
     }
 
-
-    // VIEW
-    fn view(&self) -> Html {
-        html! {
-            <div>
-                <button onclick=self.link.callback(|_| Msg::AddOne)>{ "+1" }</button>
-                <p>{ self.value }</p>
-            </div>
-        }
-    }
-
-
-    // UPDATE
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            Msg::AddOne => self.value += 1
+            Msg::Update(val) => {
+                self.stockTicker = val;
+            }
+            Msg::FetchData => {
+                self.fetching = true;
+
+                let callback = self.link.callback(
+                    move |response: Response<Json<Result<DataFromFile, Error>>>| {
+                        let (meta, Json(data)) = response.into_parts();
+                        if meta.status.is_success() {
+                            Msg::FetchReady(data)
+                        } else {
+                            Msg::FetchFailed
+                        }
+                    },
+                );
+                let baseUrl = format!("https://cloud.iexapis.com/stable/stock/{}/quote?token=pk_73b450b6f57349999e83bd3ff4d024d6", self.stockTicker);
+                let request = Request::get(baseUrl).body(Nothing).unwrap();
+                let task = FetchService::fetch(request, callback).unwrap();
+                self.ft = Some(task);
+            }
+            Msg::FetchReady(response) => {
+                self.fetching = false;
+                match response {
+                    Ok(v) => self.data = Some(v),
+                    Err(e) => {
+                        self.data = None;
+                        log::info!("error: {:?}", e);
+                    }
+                }
+            }
+            Msg::FetchFailed => {
+                self.fetching = false;
+                self.data = None;
+                log::info!("error: couldn't fetch data");
+            }
+            Msg::Ignore => {
+                return false;
+            }
         }
         true
     }
 
+    fn view(&self) -> Html {
+        html! {
+            <div class="container">
+                <p>{ "Ticker Symbol" }</p>
+                <input type="text"
+                    value=&self.stockTicker
+                    oninput=self.link.callback(|e: InputData| Msg::Update(e.value))
+                />
+                <button onclick=self.link.callback(|_| Msg::FetchData)>
+                    { "Fetch Data" }
+                </button>
+                { self.view_data() }
+            </div>
+        }
+    }
 
-
-    fn change(&mut self, _props: Self::Properties) -> ShouldRender {
-        // Should only return "true" if new properties are different to
-        // previously received properties.
-        // This component has no properties so we will always return "false".
+    fn change(&mut self, _: Self::Properties) -> ShouldRender {
         false
     }
 }
 
+impl Model {
+   fn view_data(&self) -> Html {
+        if let Some(iexResponse) = &self.data {
+            let DataFromFile { latestPrice, companyName, primaryExchange } = iexResponse;
+            html! {
+                <>
+                    <p>{ primaryExchange }</p>
+                    <p>{ companyName }</p>
+                    <p>{ latestPrice }</p>
+                </>
+            }
+        } else {
+            html! {
+                <>
+                    <p>{ "Data hasn't fetched yet." }</p>
+                </>
+            }
+        }
+    }
+}
+
 #[wasm_bindgen(start)]
-pub fn run_app() {
+pub fn main() {
+    wasm_logger::init(wasm_logger::Config::default());
     App::<Model>::new().mount_to_body();
 }
